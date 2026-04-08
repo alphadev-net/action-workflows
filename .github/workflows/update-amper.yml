@@ -32,13 +32,10 @@ jobs:
       - name: Run amper update
         id: amper_update
         run: |
-          set +e
-          OUTPUT=$(./amper update 2>&1)
-          EXIT_CODE=$?
-          set -e
-          echo "$OUTPUT"
-          if [ $EXIT_CODE -eq 0 ] || [ "${{ inputs.force_update }}" = "true" ]; then
-            VERSION=$(echo "$OUTPUT" | grep -oP 'JetBrains Amper version \K[\d.]+')
+          ./amper update > /tmp/amper_output.txt 2>&1 || true
+          cat /tmp/amper_output.txt
+          if grep -q 'nothing to update' /tmp/amper_output.txt && [ "${{ inputs.force_update }}" != "true" ]; then
+            VERSION=$(grep -oP 'JetBrains Amper version \K[\d.]+' /tmp/amper_output.txt)
             echo "new_version=$VERSION" >> $GITHUB_OUTPUT
             echo "has_changes=true" >> $GITHUB_OUTPUT
           else
