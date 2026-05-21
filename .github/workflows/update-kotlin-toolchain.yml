@@ -1,0 +1,71 @@
+name: Kotlin Toolchain Auto-Update
+
+on:
+  workflow_call:
+    inputs:
+      force_update:
+        description: 'Force update even if version is unchanged'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  update-amper:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Get current Kotlin Toolchain version
+        id: before
+        run: |
+          VERSION=$(./kotlin --version 2>&1 | grep -oP 'version \K[\d.]+')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current Kotlin Toolchain version: $VERSION"
+
+      - name: Run Kotlin Toolchain update
+        run: ./kotlin update || true
+
+      - name: Get new Kotlin Toolchain version
+        id: after
+        run: |
+          VERSION=$(./kotlin --version 2>&1 | grep -oP 'version \K[\d.]+')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "New Kotlin Toolchain version: $VERSION"
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet && [ "${{ inputs.force_update }}" != "true" ]; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run Kotlin Toolchain test
+        if: steps.changes.outputs.has_changes == 'true'
+        run: ./kotlin test
+
+      - name: Commit and push changes
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: update Kotlin Toolchain ${{ steps.before.outputs.version }} → ${{ steps.after.outputs.version }}"
+          git push
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.changes.outputs.has_changes }}" == "true" ]; then
+            echo "### ✅ Kotlin Toolchain updated and tests passed" >> $GITHUB_STEP_SUMMARY
+            echo "**${{ steps.before.outputs.version }}** → **${{ steps.after.outputs.version }}**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ℹ️ Already on latest Kotlin Toolchain version (${{ steps.before.outputs.version }})" >> $GITHUB_STEP_SUMMARY
+          fi
